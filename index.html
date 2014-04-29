@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="MQTT Websocket Temperature">
+    <meta name="author" content="Fabian Affolter/JP Mens">
+
+    <title>Server room</title>
+
+    <!-- Bootstrap core CSS -->
+    <link href="css/bootstrap.css" rel="stylesheet">
+    <!-- jQuery -->
+    <script type="text/javascript" src="js/jquery-1.10.2.min.js"></script>
+    <!-- Sparkline -->
+    <script type="text/javascript" src="js/jquery.sparkline.min.js"></script>
+    <!-- MQTT over Websockets -->
+    <script type="text/javascript" src="js/mqttws31.js"></script>
+
+    <script type="text/javascript">
+    	var websocketserver = '127.0.0.1';
+	var websocketport   = 18883;
+	var topic = 'clients/arduino/192.168.1.216/#';
+
+	var arduinoTemp = new Array();
+
+        var client = new Messaging.Client(websocketserver, websocketport,
+                                "web_" + parseInt(Math.random() * 100, 10));
+
+        client.onConnectionLost = function (responseObject) {
+                $('#message').val("connection lost: " + responseObject.errorMessage);
+        };
+
+        client.onMessageArrived = function (msg) {
+                $('#message').val(msg.payloadString);
+
+		console.log(JSON.stringify(msg.destinationName));
+		console.log(JSON.stringify(msg.payloadString));
+		
+		topic_parts = msg.destinationName.split('/');
+
+		sensor_addr = topic_parts[2];
+		if (topic_parts[topic_parts.length - 1] == 'celsius') {
+			$('#arduinoTempLabel').text(msg.payloadString + '°C');
+			$('#arduinoTempLabel').removeClass('').addClass('label-default');
+
+			arduinoTemp.push(parseInt(msg.payloadString));
+			if (arduinoTemp.length >= 20) {
+				arduinoTemp.shift();
+			}
+
+			$('#arduinoTempChart').sparkline(arduinoTemp, {
+				type: 'line',
+				width: '180',
+				height: '40'
+			});
+		} else {
+		    if (msg.payloadString == '1') {
+			$('#label1').text(sensor_addr);
+			$('#label1').removeClass('label-danger').addClass('label-success');
+		    } else {
+			$('#label1').text(sensor_addr);
+			$('#label1').removeClass('label-success').addClass('label-danger');
+		    }
+		}
+        };
+
+        var options = {
+                timeout: 3,
+                onSuccess: function () {
+                        $('#message').html('Connected to ' + websocketserver + ':' + websocketport);
+                        // Connection succeeded; subscribe to our topic
+                        client.subscribe(topic, {qos: 0});
+                        // $('#topic').val(topic);
+
+                },
+                onFailure: function (message) {
+                        $('#message').html("Connection failed: " + message.errorMessage);
+                }
+        };
+
+        function init() {
+                /* Connect to MQTT broker */
+                client.connect(options);
+        }
+
+        $(document).ready(function() {
+                init();
+        });
+
+    </script>
+
+  </head>
+
+  <body>
+    <div id="wrap">
+      <div class="container">
+        <div class="page-header"><h1><b>Server room</b></h1></div>
+
+            <div class="panel panel-default">
+              <div class="panel-body">
+                    <table class="table table-striped">
+                        <!-- Arduino online -->
+                        <tr>
+                        <td width="40%" style="vertical-align:middle;"><h3>Sensor</h3><small id="value1"></small></td>
+                        <td style="vertical-align:middle;"></td>
+                        <td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="label1" class="label">Unknown</span></h4></td>
+                        </tr>
+                        <!-- Arduino temperature -->
+			<tr>
+			<td width="40%" style="vertical-align:middle;"><h3>Sensor temperature</h3><small id="arduinoTempSensor"></small></td>
+			<td style="vertical-align:middle;"><div id="arduinoTempChart" style="height:40px; width:180px;"></div></td>
+			<td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="arduinoTempLabel" class="label">Unknown</span></h4></td>
+			</tr>
+                    </table>
+              </div>
+            </div>
+          <div class="panel panel-default">
+            <div class="panel-body">
+                    <b>Latest MQTT message:  </b> <small id="message">no message recieved</small>
+            </div>
+          </div>
+
+        <div class="footer">
+        <small><p class="text-center">&copy; <a href="http://affolter-engineering.ch">Affolter Engineering</a> 2013 - 2014</p></small>
+    </div>
+  </body>
+</html>
