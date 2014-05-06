@@ -17,10 +17,17 @@
     <!-- MQTT over Websockets -->
     <script type="text/javascript" src="js/mqttws31.js"></script>
 
+    <!-- SteelSeries gauges -->
+    <script type="text/javascript" src="js/steelseries-min.js"></script>
+    <script type="text/javascript" src="js/tween-min.js"></script>
+
     <script type="text/javascript">
     	var websocketserver = '127.0.0.1';
-	var websocketport   = 18883;
-	var topic = 'clients/arduino/192.168.1.216/#';
+	//var websocketport   = 18883;
+	// var topic = 'clients/arduino/192.168.1.216/#';
+	var websocketport   = 18884;
+	var topic = 'clients/arduino/10.0.69.105/#';
+	var tempGauge;
 
 	var arduinoTemp = new Array();
 
@@ -29,6 +36,7 @@
 
         client.onConnectionLost = function (responseObject) {
                 $('#message').val("connection lost: " + responseObject.errorMessage);
+		tempGauge.setLedColor(steelseries.LedColor.RED_LED); //change status LED to RED on broker disconnection
         };
 
         client.onMessageArrived = function (msg) {
@@ -54,6 +62,7 @@
 				width: '180',
 				height: '40'
 			});
+			tempGauge.setValue(msg.payloadString);
 		} else {
 		    if (msg.payloadString == '1') {
 			$('#label1').text(sensor_addr);
@@ -73,15 +82,38 @@
                         client.subscribe(topic, {qos: 0});
                         // $('#topic').val(topic);
 
+			tempGauge.setLedColor(steelseries.LedColor.GREEN_LED); //change status LED to GREEN on broker connection
+
                 },
                 onFailure: function (message) {
                         $('#message').html("Connection failed: " + message.errorMessage);
+			tempGauge.setLedColor(steelseries.LedColor.RED_LED); //change status LED to RED on broker disconnection
                 }
         };
 
         function init() {
                 /* Connect to MQTT broker */
                 client.connect(options);
+
+                tempGauge = new steelseries.Radial('gaugeCanvas', {
+                        gaugeType: steelseries.GaugeType.TYPE4,
+                        minValue:0,
+                        maxValue:40,
+                        size: 300,
+                        frameDesign: steelseries.FrameDesign.STEEL,
+                        knobStyle: steelseries.KnobStyle.STEEL,
+                        pointerType: steelseries.PointerType.TYPE6,
+                        lcdDecimals: 0,
+                        section: null,
+                        area: null,
+                        titleString: 'Temperature',
+                        unitString: 'C',
+                        threshold: 10,
+                        lcdVisible: true,
+                        lcdDecimals: 2
+                   });
+                tempGauge.setValue(''); //gives a blank display 'NaN' until broker has connected
+                tempGauge.setLedColor(steelseries.LedColor.RED_LED); //set the LED RED until connected
         }
 
         $(document).ready(function() {
@@ -115,6 +147,8 @@
                     </table>
               </div>
             </div>
+
+	    <div>       <canvas id=gaugeCanvas width=200 height=200>No canvas in your browser...sorry...</canvas></div>
           <div class="panel panel-default">
             <div class="panel-body">
                     <b>Latest MQTT message:  </b> <small id="message">no message recieved</small>
