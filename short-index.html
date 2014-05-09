@@ -24,11 +24,6 @@
     <script type="text/javascript" src="conf.js"></script>
 
     <script type="text/javascript">
-    	var websocketserver = '127.0.0.1';
-	//var websocketport   = 18883;
-	// var topic = 'clients/arduino/192.168.1.216/#';
-	var websocketport   = 18884;
-	var topic = 'clients/arduino/10.0.69.105/#';
 	var tempGauge;
 
 	var arduinoTemp = new Array();
@@ -46,6 +41,18 @@
 
 		console.log(JSON.stringify(msg.destinationName));
 		console.log(JSON.stringify(msg.payloadString));
+
+		if (msg.destinationName == ledtopic) {
+			var ledstatus = parseInt(msg.payloadString);
+			console.log("GOTCHA " + ledstatus);
+			if (ledstatus) {
+				$("#button_off").hide();
+				$("#button_on").show();
+			} else {
+				$("#button_off").show();
+				$("#button_on").hide();
+			}
+		}
 		
 		topic_parts = msg.destinationName.split('/');
 
@@ -82,6 +89,7 @@
                         $('#message').html('Connected to ' + websocketserver + ':' + websocketport);
                         // Connection succeeded; subscribe to our topic
                         client.subscribe(topic, {qos: 0});
+                        client.subscribe(ledtopic, {qos: 0});
                         // $('#topic').val(topic);
 
 			tempGauge.setLedColor(steelseries.LedColor.GREEN_LED); //change status LED to GREEN on broker connection
@@ -101,7 +109,7 @@
                         gaugeType: steelseries.GaugeType.TYPE4,
                         minValue:0,
                         maxValue:40,
-                        size: 300,
+                        size: 250,
                         frameDesign: steelseries.FrameDesign.STEEL,
                         knobStyle: steelseries.KnobStyle.STEEL,
                         pointerType: steelseries.PointerType.TYPE6,
@@ -120,6 +128,19 @@
 
         $(document).ready(function() {
                 init();
+
+
+		$("#button_off").click(function() {
+			message = new Messaging.Message("1");
+			message.destinationName = ledtopic + "/cmd";
+			client.send(message);
+		});
+		$("#button_on").click(function() {
+			message = new Messaging.Message("0");
+			message.destinationName = ledtopic + "/cmd";
+			client.send(message);
+		});
+
         });
 
     </script>
@@ -129,7 +150,6 @@
   <body>
     <div id="wrap">
       <div class="container">
-        <div class="page-header"><h1><b>Server room</b></h1></div>
 
             <div class="panel panel-default">
               <div class="panel-body">
@@ -137,30 +157,36 @@
                         <!-- Arduino online -->
                         <tr>
                         <td rowspan="2" width="40%" style="vertical-align:middle;">
-				<canvas id="gaugeCanvas" width="300" height="300">No canvas in your browser...sorry...</canvas>
+				<canvas id="gaugeCanvas" width="250" height="250">No canvas in your browser...sorry...</canvas>
 				</td>
 			<td>&nbsp;</td>
 			<td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="arduinoTempLabel" class="label">Unknown</span></h4></td>
                         <td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="label1" class="label">Unknown</span></h4></td>
                         </tr>
+
                         <!-- Arduino temperature -->
 			<tr>
 			<td>&nbsp;</td>
 			<td style="vertical-align:middle;"><div id="arduinoTempChart" style="height:40px; width:180px;"></div></td>
-			<td width="20%" style="vertical-align:middle;"></td>
+			<td width="20%" style="vertical-align:middle;">
+				<span>
+				<img id="button_off" src="img/led_red_black40x40.png" />
+				<img id="button_on" src="img/led_green_black40x40.png" hidden />
+				</span>
+			</td><!-- LED control -->
 			</tr>
+
+			<tr>
+			<td></td>
+			<td colspan="3" align="right"><small id="message">nothing</small></td></tr>
                     </table>
               </div>
             </div>
-
-          <div class="panel panel-default">
-            <div class="panel-body">
-                    <b>Latest MQTT message:  </b> <small id="message">no message recieved</small>
-            </div>
           </div>
 
-        <div class="footer">
+        <!-- 
         <small><p class="text-center">&copy; <a href="http://affolter-engineering.ch">Affolter Engineering</a> 2013 - 2014</p></small>
+	-->
     </div>
   </body>
 </html>
