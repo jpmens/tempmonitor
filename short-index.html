@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="MQTT Websocket Temperature">
+    <meta name="author" content="Fabian Affolter/JP Mens">
+
+    <title>Server room</title>
+
+    <!-- Bootstrap core CSS -->
+    <link href="css/bootstrap.css" rel="stylesheet">
+    <!-- jQuery -->
+    <script type="text/javascript" src="js/jquery-1.10.2.min.js"></script>
+    <!-- Sparkline -->
+    <script type="text/javascript" src="js/jquery.sparkline.min.js"></script>
+    <!-- MQTT over Websockets -->
+    <script type="text/javascript" src="js/mqttws31.js"></script>
+
+    <!-- SteelSeries gauges -->
+    <script type="text/javascript" src="js/steelseries-min.js"></script>
+    <script type="text/javascript" src="js/tween-min.js"></script>
+
+    <script type="text/javascript" src="conf.js"></script>
+
+    <script type="text/javascript">
+	var tempGauge;
+
+	var arduinoTemp = new Array();
+
+        var client = new Messaging.Client(websocketserver, websocketport,
+                                "web_" + parseInt(Math.random() * 100, 10));
+
+        client.onConnectionLost = function (responseObject) {
+                $('#message').val("connection lost: " + responseObject.errorMessage);
+		tempGauge.setLedColor(steelseries.LedColor.RED_LED); //change status LED to RED on broker disconnection
+        };
+
+        client.onMessageArrived = function (msg) {
+                $('#message').val(msg.payloadString);
+
+		console.log(JSON.stringify(msg.destinationName));
+		console.log(JSON.stringify(msg.payloadString));
+
+		if (msg.destinationName == ledtopic) {
+			var ledstatus = parseInt(msg.payloadString);
+			console.log("GOTCHA " + ledstatus);
+			if (ledstatus) {
+				$("#button_off").hide();
+				$("#button_on").show();
+			} else {
+				$("#button_off").show();
+				$("#button_on").hide();
+			}
+			return;
+		}
+		
+		topic_parts = msg.destinationName.split('/');
+
+		sensor_addr = topic_parts[2];
+		if (topic_parts[topic_parts.length - 1] == 'celsius') {
+			$('#arduinoTempLabel').text(msg.payloadString + '°C');
+			$('#arduinoTempLabel').removeClass('').addClass('label-default');
+
+			arduinoTemp.push(parseInt(msg.payloadString));
+			if (arduinoTemp.length >= 20) {
+				arduinoTemp.shift();
+			}
+
+			$('#arduinoTempChart').sparkline(arduinoTemp, {
+				type: 'line',
+				width: '180',
+				height: '40'
+			});
+			tempGauge.setValue(msg.payloadString);
+		} else {
+		    if (msg.payloadString == '1') {
+			$('#label1').text(sensor_addr);
+			$('#label1').removeClass('label-danger').addClass('label-success');
+		    } else {
+			$('#label1').text(sensor_addr);
+			$('#label1').removeClass('label-success').addClass('label-danger');
+		    }
+		}
+        };
+
+        var options = {
+                timeout: 3,
+                onSuccess: function () {
+                        $('#message').html('Connected to ' + websocketserver + ':' + websocketport);
+                        // Connection succeeded; subscribe to our topic
+                        client.subscribe(topic, {qos: 0});
+                        client.subscribe(ledtopic, {qos: 0});
+                        // $('#topic').val(topic);
+
+			tempGauge.setLedColor(steelseries.LedColor.GREEN_LED); //change status LED to GREEN on broker connection
+
+                },
+                onFailure: function (message) {
+                        $('#message').html("Connection failed: " + message.errorMessage);
+			tempGauge.setLedColor(steelseries.LedColor.RED_LED); //change status LED to RED on broker disconnection
+                }
+        };
+
+        function init() {
+                /* Connect to MQTT broker */
+                client.connect(options);
+
+                tempGauge = new steelseries.Radial('gaugeCanvas', {
+                        gaugeType: steelseries.GaugeType.TYPE4,
+                        minValue:0,
+                        maxValue:40,
+                        size: 250,
+                        frameDesign: steelseries.FrameDesign.STEEL,
+                        knobStyle: steelseries.KnobStyle.STEEL,
+                        pointerType: steelseries.PointerType.TYPE6,
+                        lcdDecimals: 0,
+                        section: null,
+                        area: null,
+                        titleString: 'Temperature',
+                        unitString: 'C',
+                        threshold: 26,
+                        lcdVisible: true,
+                        lcdDecimals: 2
+                   });
+                tempGauge.setValue(''); //gives a blank display 'NaN' until broker has connected
+                tempGauge.setLedColor(steelseries.LedColor.RED_LED); //set the LED RED until connected
+        }
+
+        $(document).ready(function() {
+                init();
+
+
+		$("#button_off").click(function() {
+			message = new Messaging.Message("1");
+			message.destinationName = ledtopic + "/cmd";
+			client.send(message);
+		});
+		$("#button_on").click(function() {
+			message = new Messaging.Message("0");
+			message.destinationName = ledtopic + "/cmd";
+			client.send(message);
+		});
+
+        });
+
+    </script>
+
+  </head>
+
+  <body>
+    <div id="wrap">
+      <div class="container">
+
+            <div class="panel panel-default">
+              <div class="panel-body">
+                    <table border="0">
+                        <!-- Arduino online -->
+                        <tr>
+                        <td rowspan="2" width="40%" style="vertical-align:middle;">
+				<canvas id="gaugeCanvas" width="250" height="250">No canvas in your browser...sorry...</canvas>
+				</td>
+			<td>&nbsp;</td>
+			<td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="arduinoTempLabel" class="label">Unknown</span></h4></td>
+                        <td width="30%" style="vertical-align:middle;"><h4>&nbsp;<span id="label1" class="label">Unknown</span></h4></td>
+                        </tr>
+
+                        <!-- Arduino temperature -->
+			<tr>
+			<td>&nbsp;</td>
+			<td style="vertical-align:middle;"><div id="arduinoTempChart" style="height:40px; width:180px;"></div></td>
+			<td width="20%" style="vertical-align:middle;">
+				<span>
+				<img id="button_off" src="img/led_red_black40x40.png" />
+				<img id="button_on" src="img/led_green_black40x40.png" hidden />
+				</span>
+			</td><!-- LED control -->
+			</tr>
+
+			<tr>
+			<td></td>
+			<td colspan="3" align="right"><small id="message">nothing</small></td></tr>
+                    </table>
+              </div>
+            </div>
+          </div>
+
+        <!-- 
+        <small><p class="text-center">&copy; <a href="http://affolter-engineering.ch">Affolter Engineering</a> 2013 - 2014</p></small>
+	-->
+    </div>
+  </body>
+</html>
